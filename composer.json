@@ -1,0 +1,67 @@
+{
+    "name": "kntnt/html-to-markdown",
+    "description": "A dependency-free PHP 8.5 library that converts HTML into GitHub Flavored Markdown. A faithful port of the Go library JohannesKaufmann/html-to-markdown (v2).",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "html",
+        "markdown",
+        "gfm",
+        "converter",
+        "commonmark"
+    ],
+    "authors": [
+        {
+            "name": "Thomas Barregren",
+            "email": "thomas@kntnt.com",
+            "homepage": "https://www.kntnt.com/"
+        },
+        {
+            "name": "Johannes Kaufmann",
+            "homepage": "https://github.com/JohannesKaufmann",
+            "role": "Author of the original Go library"
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "ext-dom": "*",
+        "ext-mbstring": "*"
+    },
+    "require-dev": {
+        "pestphp/pest": "^3.5",
+        "phpstan/phpstan": "^2.1",
+        "friendsofphp/php-cs-fixer": "^3.64"
+    },
+    "autoload": {
+        "psr-4": {
+            "Kntnt\\HtmlToMarkdown\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Kntnt\\HtmlToMarkdown\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "test:coverage": "pest --coverage",
+        "stan": "phpstan analyse",
+        "cs": "php-cs-fixer fix --dry-run --diff",
+        "cs-fix": "php-cs-fixer fix"
+    },
+    "scripts-descriptions": {
+        "test": "Run the Pest test suite.",
+        "test:coverage": "Run the Pest test suite with code coverage (requires pcov or Xdebug).",
+        "stan": "Run PHPStan static analysis at level max.",
+        "cs": "Check coding style against PSR-12 without changing files.",
+        "cs-fix": "Fix coding style to PSR-12."
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
