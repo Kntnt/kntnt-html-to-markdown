@@ -12,7 +12,7 @@ Guidance for AI coding agents (Claude Code, Copilot, Cursor, Codex, …) working
 
 ## Architecture
 
-The full Go→PHP module mapping lives in `docs/architecture.md`, which the initial build produces (along with `docs/coding-standards.md`); it does not exist in a fresh checkout. Until then, the load-bearing decisions are:
+The full Go→PHP module mapping, the escaping notes, and the bridged Go-vs-PHP implementation differences live in `docs/architecture.md` — read it before changing the engine. The load-bearing decisions are:
 
 - **Parser:** PHP's native `Dom\HTMLDocument` (HTML5-compliant, with `querySelectorAll`) replaces both Go's `golang.org/x/net/html` and `cascadia`. No `Masterminds/html5`; no legacy `DOMDocument` (it mangles HTML5).
 - **Zero runtime dependencies.** Every upstream dependency maps to a PHP built-in: `Dom\*`, `levenshtein()`, `mbstring`, and `Uri\Rfc3986\Uri` (PHP 8.5) for `withDomain` URL resolution.

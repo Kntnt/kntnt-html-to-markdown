@@ -33,7 +33,7 @@ jobs:
         run: vendor/bin/pest --coverage --min=90
 
       - name: Run static analysis
-        run: vendor/bin/phpstan analyse --no-progress
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
       - name: Check coding style
         run: vendor/bin/php-cs-fixer fix --dry-run --diff
