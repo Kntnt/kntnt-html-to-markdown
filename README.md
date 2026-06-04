@@ -1,10 +1,10 @@
 # kntnt/html-to-markdown
 
-A dependency-free PHP 8.5 library that converts HTML into [GitHub Flavored Markdown](https://github.github.com/gfm/). It is a faithful port of the Go library [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) — this release ports upstream **v2.5.1** (commit `b0879832`).
+A dependency-free PHP 8.5 library that converts HTML into [GitHub Flavored Markdown](https://github.github.com/gfm/) (GFM). It is a faithful port of the Go library [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) — this release ports upstream **v2.5.1** (commit `b0879832`).
 
-The output is GFM with one deliberate gap: **task lists** are not produced. GFM's other two extensions — autolinks and the tagfilter — have no counterpart when the *input* is HTML, so there is nothing for them to do; [Supported Markdown](#supported-markdown) explains why.
+The output is GFM with one deliberate gap: **task lists** are not produced. GFM's other two extensions — autolinks and the tagfilter — have no counterpart when the *input* is HTML, so there is nothing for them to do ([see below](#supported-markdown) for explanation).
 
-The port covers the converter core and the `base`, `commonmark`, `strikethrough`, and `table` plugins. It is consumed by other Kntnt projects via Composer — for example, to serve per-page Markdown to LLMs.
+The port covers the converter core and the `base`, `commonmark`, `strikethrough`, and `table` plugins. It is consumed by other projects via [Composer](https://getcomposer.org/).
 
 ## Why this library
 
