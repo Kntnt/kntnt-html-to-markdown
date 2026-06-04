@@ -1,0 +1,14 @@
+# Keep the Composer dist archive lean: a consumer's `composer require` only
+# needs the runtime code and its licensing/metadata, not the dev tooling,
+# tests, fixtures, CI, or documentation. These paths are stripped from the
+# `git archive` that Composer downloads with --prefer-dist (the default).
+/.github/                export-ignore
+/docs/                   export-ignore
+/tests/                  export-ignore
+/.gitattributes          export-ignore
+/.gitignore              export-ignore
+/.php-cs-fixer.dist.php   export-ignore
+/phpstan.neon            export-ignore
+/phpunit.xml             export-ignore
+/AGENTS.md               export-ignore
+/CLAUDE.md               export-ignore
