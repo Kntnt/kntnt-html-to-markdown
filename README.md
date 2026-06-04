@@ -2,6 +2,8 @@
 
 A dependency-free PHP 8.5 library that converts HTML into [GitHub Flavored Markdown](https://github.github.com/gfm/). It is a faithful port of the Go library [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) — this release ports upstream **v2.5.1** (commit `b0879832`).
 
+The output is GFM with one deliberate gap: **task lists** are not produced. GFM's other two extensions — autolinks and the tagfilter — have no counterpart when the *input* is HTML, so there is nothing for them to do; [Supported Markdown](#supported-markdown) explains why.
+
 The port covers the converter core and the `base`, `commonmark`, `strikethrough`, and `table` plugins. It is consumed by other Kntnt projects via Composer — for example, to serve per-page Markdown to LLMs.
 
 ## Why this library
@@ -99,17 +101,19 @@ $converter->convertString($html, new Options(
 
 ## Supported Markdown
 
-This library targets the parts of GFM that upstream's ported plugins cover:
+The output targets [GitHub Flavored Markdown](https://github.github.com/gfm/). GFM is CommonMark plus five extensions. Because this library converts *from* HTML rather than parsing Markdown, each extension means something slightly different here — the table below is how each is handled:
 
-- **CommonMark** — headings (ATX and Setext), bold/italic, links, images, inline and fenced code, blockquotes, ordered and unordered lists, thematic breaks, hard line breaks, and HTML comments.
-- **Strikethrough** — `<del>`, `<s>`, and `<strike>`.
-- **Tables** — GFM pipe tables with alignment, `colspan`/`rowspan`, captions, header promotion, and presentation-table handling.
+| GFM extension | Status | Notes |
+|---|---|---|
+| Tables | ✅ Produced | Pipe tables with alignment, `colspan`/`rowspan`, captions, header promotion, and presentation-table handling. |
+| Strikethrough | ✅ Produced | `<del>`, `<s>`, and `<strike>` → `~~…~~`. |
+| Task lists | ❌ Not produced | The one gap. A checkbox list item (`<li><input type="checkbox">…`) is rendered as a plain list item, not `- [ ]` / `- [x]`. |
+| Autolinks | — Not applicable | An autolink is a *parsing* feature: a GFM reader turns a bare `https://…` in Markdown text into a link. Converting the other way, there is nothing to do — a bare URL is emitted as text and any GFM renderer autolinks it. (URLs that are already `<a>` or `<img>` elements become normal Markdown links and images.) |
+| Tagfilter (disallowed raw HTML) | — Not applicable | The tagfilter neutralizes dangerous raw tags (`<script>`, `<style>`, `<iframe>`, `<noscript>`, `<textarea>`, …) found in Markdown *input*. This converter already strips exactly those tags from the HTML and emits Markdown rather than passing raw HTML through, so there is nothing left for the filter to act on. |
 
-Explicitly **not** supported (out of scope, matching the port's boundaries):
+Underneath those extensions, the full **CommonMark** core is supported: headings (ATX and Setext), bold/italic, links, images, inline and fenced code, blockquotes, ordered and unordered lists, thematic breaks, hard line breaks, and HTML comments.
 
-- **Task lists** (`- [ ]` checkboxes)
-- **Autolinks** (bare-URL linkification)
-- **The GFM tagfilter** extension
+In short: the output is GFM except for task lists. This matches the upstream Go library's boundaries — task lists are out of scope there too.
 
 ## How it works
 
