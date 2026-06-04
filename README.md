@@ -5,13 +5,13 @@
 [![Latest release](https://img.shields.io/packagist/v/kntnt/html-to-markdown)](https://packagist.org/packages/kntnt/html-to-markdown)
 [![CI](https://github.com/Kntnt/kntnt-html-to-markdown/actions/workflows/ci.yml/badge.svg)](https://github.com/Kntnt/kntnt-html-to-markdown/actions/workflows/ci.yml)
 
-A dependency-free PHP 8.5 library that converts HTML into [GitHub Flavored Markdown](https://github.github.com/gfm/). If you need to turn HTML into clean, predictable Markdown — to feed page content to an LLM, archive content portably, or render it elsewhere — and you want output that matches a battle-tested reference implementation, this is for you.
+A dependency-free PHP 8.5 library that converts HTML into [GitHub Flavored Markdown](https://github.github.com/gfm/) (GFM). If you need to turn HTML into clean, predictable Markdown — to feed page content to an LLM, archive content portably, or render it elsewhere — and you want output that matches a battle-tested reference implementation, this is for you.
 
 ## Description
 
 `kntnt/html-to-markdown` is a faithful PHP port of the Go library [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) (v2). It ports the converter core and the `base`, `commonmark`, `strikethrough`, and `table` plugins, reproducing the Go library's output **byte-for-byte**: upstream's golden test fixtures are asserted character-for-character by the test suite.
 
-It has **zero runtime dependencies**. Every dependency the Go library reaches for maps onto a PHP built-in — `Dom\HTMLDocument` for HTML5 parsing and CSS selectors, `mbstring` for text handling, and `Uri\Rfc3986\Uri` for relative-URL resolution — so the package drops into any PHP 8.5 project without dragging in a dependency tree or risking version conflicts. It is used by other Kntnt projects via Composer, for example to serve per-page Markdown to large language models.
+It has **zero runtime dependencies**. Every dependency the Go library reaches for maps onto a PHP built-in — `Dom\HTMLDocument` for HTML5 parsing and CSS selectors, `mbstring` for text handling, and `Uri\Rfc3986\Uri` for relative-URL resolution — so the package drops into any PHP 8.5 project without dragging in a dependency tree or risking version conflicts. It is used by other Kntnt projects via Composer.
 
 ### Key Features
 
@@ -27,7 +27,7 @@ It has **zero runtime dependencies**. Every dependency the Go library reaches fo
 
 ### The problem
 
-More and more PHP applications need Markdown out of HTML — to feed page content to an LLM, to store content in a portable form, or to re-render it somewhere a browser is not. The naive approaches all fail in their own way: stripping tags throws away structure, and hand-rolled regular expressions produce invalid or surprising Markdown. Getting it right is harder than it looks, and the subtlest part is escaping: a sentence that happens to contain `**` or a leading `#` must not silently turn into bold text or a heading when it round-trips through Markdown.
+More and more PHP applications need Markdown out of HTML, and the naive approaches all fail in their own way: stripping tags throws away structure, and hand-rolled regular expressions produce invalid or surprising Markdown. Getting it right is harder than it looks, and the subtlest part is escaping: a sentence that happens to contain `**` or a leading `#` must not silently turn into bold text or a heading when it round-trips through Markdown.
 
 ### How this library helps
 
