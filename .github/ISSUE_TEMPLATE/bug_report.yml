@@ -1,0 +1,96 @@
+name: Bug report
+description: Report incorrect conversion, an error, or other unexpected behaviour.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report. Please
+        [search existing issues](https://github.com/Kntnt/kntnt-html-to-markdown/issues?q=is%3Aissue)
+        first — your problem may already be reported or fixed.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear, concise description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: >
+        The smallest input that triggers the bug. Include the HTML you
+        converted and how you set up the converter — which plugins and
+        options, or that you used the `HtmlToMarkdown::convert()` facade.
+      placeholder: |
+        $converter = new Converter([new BasePlugin(), new CommonmarkPlugin()]);
+        $markdown = $converter->convertString('<p>…</p>', new Options());
+      render: php
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Markdown
+      description: What output you expected.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Markdown
+      description: What output you actually got.
+      render: markdown
+    validations:
+      required: true
+
+  - type: input
+    id: library-version
+    attributes:
+      label: Library version
+      description: Run `composer show kntnt/html-to-markdown` to find it.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version
+      description: Run `php -v` (the first line).
+      placeholder: "8.5.0"
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system / platform
+      description: Optional — only if you suspect it is relevant.
+      placeholder: "Ubuntu 24.04, macOS 15, …"
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Logs, stack traces, or additional context
+      description: Any exception message, stack trace, or screenshot that helps.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues and did not find a duplicate.
+          required: true
+        - label: I am using the latest release and can still reproduce this.
+          required: true
