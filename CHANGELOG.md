@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-04
+
+### Added
+
+- GitHub issue forms (bug report, feature request) and a pull request template.
+
+### Changed
+
+- Rewrote the README around a users / extenders / contributors structure, documenting the plugin extension API and clarifying GFM coverage.
+
 ## [0.1.0] - 2026-06-03
 
 Initial release. A faithful PHP 8.5 port of `JohannesKaufmann/html-to-markdown` v2 (commit `b0879832`), covering the converter core and the `base`, `commonmark`, `strikethrough`, and `table` plugins.
@@ -24,5 +34,6 @@ Initial release. A faithful PHP 8.5 port of `JohannesKaufmann/html-to-markdown` 
 - Task lists, autolinks, and the GFM tagfilter are intentionally **not** implemented.
 - HTML is parsed with PHP's native `Dom\HTMLDocument` (HTML5). Any place where this legitimately differs from Go's `x/net/html` is documented in `docs/architecture.md` and annotated at the affected fixture.
 
-[Unreleased]: https://github.com/Kntnt/kntnt-html-to-markdown/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Kntnt/kntnt-html-to-markdown/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Kntnt/kntnt-html-to-markdown/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Kntnt/kntnt-html-to-markdown/releases/tag/v0.1.0
