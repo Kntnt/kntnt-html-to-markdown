@@ -1,16 +1,44 @@
 # kntnt/html-to-markdown
 
-A dependency-free PHP 8.5 library that converts HTML into [GitHub Flavored Markdown](https://github.github.com/gfm/) (GFM). It is a faithful port of the Go library [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) — this release ports upstream **v2.5.1** (commit `b0879832`).
+[![License](https://img.shields.io/github/license/Kntnt/kntnt-html-to-markdown)](LICENSE)
+[![PHP Version](https://img.shields.io/packagist/php-v/kntnt/html-to-markdown)](composer.json)
+[![Latest release](https://img.shields.io/packagist/v/kntnt/html-to-markdown)](https://packagist.org/packages/kntnt/html-to-markdown)
+[![CI](https://github.com/Kntnt/kntnt-html-to-markdown/actions/workflows/ci.yml/badge.svg)](https://github.com/Kntnt/kntnt-html-to-markdown/actions/workflows/ci.yml)
 
-The output is GFM with one deliberate gap: **task lists** are not produced. GFM's other two extensions — autolinks and the tagfilter — have no counterpart when the *input* is HTML, so there is nothing for them to do ([see below](#supported-markdown) for explanation).
+A dependency-free PHP 8.5 library that converts HTML into [GitHub Flavored Markdown](https://github.github.com/gfm/). If you need to turn HTML into clean, predictable Markdown — to feed page content to an LLM, archive content portably, or render it elsewhere — and you want output that matches a battle-tested reference implementation, this is for you.
 
-The port covers the converter core and the `base`, `commonmark`, `strikethrough`, and `table` plugins. It is consumed by other projects via [Composer](https://getcomposer.org/).
+## Description
 
-## Why this library
+`kntnt/html-to-markdown` is a faithful PHP port of the Go library [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) (v2). It ports the converter core and the `base`, `commonmark`, `strikethrough`, and `table` plugins, reproducing the Go library's output **byte-for-byte**: upstream's golden test fixtures are asserted character-for-character by the test suite.
 
-- **Faithful.** Upstream's golden fixtures are asserted byte-for-byte. Output matches the Go library wherever PHP's HTML5 parser and Go's `x/net/html` agree.
-- **Zero runtime dependencies.** Every upstream dependency maps to a PHP built-in: `Dom\HTMLDocument` for HTML5 parsing and CSS selectors, `mbstring` for text handling, and `Uri\Rfc3986\Uri` for relative-URL resolution. No Composer runtime packages, ever.
-- **Smart escaping.** Context-aware escaping (ported from upstream's `ESCAPING.md`) means fake `**bold**` in text stays literal while real `<strong>` becomes `**bold**`.
+It has **zero runtime dependencies**. Every dependency the Go library reaches for maps onto a PHP built-in — `Dom\HTMLDocument` for HTML5 parsing and CSS selectors, `mbstring` for text handling, and `Uri\Rfc3986\Uri` for relative-URL resolution — so the package drops into any PHP 8.5 project without dragging in a dependency tree or risking version conflicts. It is used by other Kntnt projects via Composer, for example to serve per-page Markdown to large language models.
+
+### Key Features
+
+- **Faithful port.** Output matches the Go library byte-for-byte wherever PHP's HTML5 parser and Go's `x/net/html` agree; upstream's golden fixtures are asserted in the test suite.
+- **Zero runtime dependencies.** No Composer runtime packages — only the near-ubiquitous `ext-dom` and `ext-mbstring`.
+- **GitHub Flavored Markdown.** Full CommonMark core plus GFM tables and strikethrough.
+- **Tables done properly.** Pipe tables with alignment, `colspan`/`rowspan`, captions, header promotion, and presentation-table handling.
+- **Smart, context-aware escaping.** Text that merely *looks* like Markdown stays literal, while real formatting elements become real Markdown.
+- **Relative-URL resolution.** Resolve `href`/`src` against a base domain to produce absolute links and images.
+- **Scoped conversion.** Include or exclude parts of the document with CSS selectors.
+- **Configurable output.** Choose emphasis delimiters, heading style, code fences, list markers, and more.
+- **Two entry points.** A one-line static facade for the common case, and a deep, extensible `Converter` for everything else.
+
+### The problem
+
+More and more PHP applications need Markdown out of HTML — to feed page content to an LLM, to store content in a portable form, or to re-render it somewhere a browser is not. The naive approaches all fail in their own way: stripping tags throws away structure, and hand-rolled regular expressions produce invalid or surprising Markdown. Getting it right is harder than it looks, and the subtlest part is escaping: a sentence that happens to contain `**` or a leading `#` must not silently turn into bold text or a heading when it round-trips through Markdown.
+
+### How this library helps
+
+Rather than inventing yet another converter, this library ports a mature, widely used, well-tested one — `JohannesKaufmann/html-to-markdown` — and holds itself to that reference byte-for-byte. You get GitHub Flavored Markdown out of the box: headings, emphasis, links, images, code, blockquotes, lists, thematic breaks, hard breaks, comments, GFM tables, and strikethrough. Relative URLs can be resolved against a base domain, conversion can be scoped to part of a document, and escaping is handled by a two-phase, context-aware model that decides *per occurrence* whether a character needs a backslash. Because it has zero runtime dependencies, it installs cleanly into any PHP 8.5 codebase.
+
+### Limitations
+
+- **No task lists.** This is the one deliberate gap in GFM coverage: a checkbox list item (`<li><input type="checkbox">…`) is rendered as a plain list item, not `- [ ]` / `- [x]`. Task lists are out of scope upstream too.
+- **Autolinks and the tagfilter do not apply.** Both are *parsing* features that act on Markdown input; when the input is HTML there is nothing for them to do. See [Supported Markdown](#supported-markdown) for the details.
+- **It is a converter, not a sanitizer.** It emits Markdown (and strips script/style/iframe-style tags in the process), but it is not designed or audited as a security boundary against hostile HTML. Sanitize untrusted input separately if that is your threat model.
+- **PHP 8.5+ only.** The port uses modern language and standard-library features (including `Uri\Rfc3986\Uri`) and carries no back-compatibility shims for older PHP.
 
 ## Requirements
 
@@ -23,11 +51,13 @@ The port covers the converter core and the `base`, `commonmark`, `strikethrough`
 composer require kntnt/html-to-markdown
 ```
 
+No further configuration is required.
+
 ## Usage
 
 ### The facade
 
-For the common case, the static facade mirrors upstream's `ConvertString`:
+For the common case, the static facade mirrors upstream's `ConvertString`. It wires up the `base` and `commonmark` plugins and converts in one call:
 
 ```php
 use Kntnt\HtmlToMarkdown\HtmlToMarkdown;
@@ -46,9 +76,11 @@ $markdown = HtmlToMarkdown::convert(
 // => ![](https://example.com/assets/image.png)
 ```
 
+The facade also accepts `includeSelector` and `excludeSelector` (see [Include / exclude selectors](#include--exclude-selectors)). For strikethrough, tables, or custom output styling, build a `Converter` directly.
+
 ### The converter
 
-For full control — custom plugins, options, include/exclude selectors — build a `Converter` directly. The `base` and `commonmark` plugins are the minimum needed for sensible output; add `strikethrough` and `table` as required:
+For full control — strikethrough and tables, custom output options, or custom plugins — build a `Converter`. The `base` and `commonmark` plugins are the minimum needed for sensible output; add `strikethrough` and `table` as required:
 
 ```php
 use Kntnt\HtmlToMarkdown\Converter\Converter;
@@ -73,9 +105,11 @@ $markdown = $converter->convertString(
 );
 ```
 
+A single converter is safe to reuse across many conversions: options that vary per request — the base domain and the include/exclude selectors — live on the `Options` object passed to `convertString()`, not on the converter itself. If you already hold a parsed DOM, `convertNode()` takes a `Dom\Node` instead of a string.
+
 ### Commonmark options
 
-The `CommonmarkPlugin` accepts the same options as upstream:
+The `CommonmarkPlugin` accepts the same options as upstream, as named constructor arguments:
 
 ```php
 new CommonmarkPlugin(
@@ -99,7 +133,7 @@ $converter->convertString($html, new Options(
 ));
 ```
 
-## Supported Markdown
+### Supported Markdown
 
 The output targets [GitHub Flavored Markdown](https://github.github.com/gfm/). GFM is CommonMark plus five extensions. Because this library converts *from* HTML rather than parsing Markdown, each extension means something slightly different here — the table below is how each is handled:
 
@@ -115,22 +149,172 @@ Underneath those extensions, the full **CommonMark** core is supported: headings
 
 In short: the output is GFM except for task lists. This matches the upstream Go library's boundaries — task lists are out of scope there too.
 
-## How it works
+### Updating
 
-HTML is parsed once into a `Dom\HTMLDocument`. Plugins register renderers per HTML tag (with priorities), a `TagType` (block/inline) that drives whitespace collapsing, and before/after hooks that transform the DOM and the final Markdown. Escaping is two-phase: text is escaped greedily with internal sentinel bytes during rendering, then a context-aware pass decides — per occurrence — whether each escape survives. The full design, including the Go→PHP module map and every documented parser-difference deviation, is in [`docs/architecture.md`](docs/architecture.md).
+This is a Composer package, so updating is simply:
+
+```bash
+composer update kntnt/html-to-markdown
+```
+
+The project follows [Semantic Versioning](https://semver.org/), so patch and minor updates within a major version will not break your integration. See the [Changelog](#changelog) for what each release contains.
+
+## Frequently asked questions (FAQ)
+
+#### Does it produce task lists?
+
+No. Rendering a checkbox `<li>` as `- [ ]` / `- [x]` is the single deliberate gap in GFM coverage; the item is emitted as a plain list item instead. This matches the upstream Go library, where task lists are also out of scope.
+
+#### Why does it require PHP 8.5?
+
+The port leans on modern PHP, including the `Uri\Rfc3986\Uri` class introduced in 8.5 for relative-URL resolution. Keeping a single, modern floor avoids back-compatibility shims and keeps the code close to the Go original.
+
+#### Is the output really identical to the Go library?
+
+Wherever PHP's HTML5 parser and Go's `x/net/html` agree, yes — upstream's golden fixtures are asserted byte-for-byte. The only legitimate source of divergence is a genuine difference between the two HTML5 parsers; any such case is documented in [`docs/architecture.md`](docs/architecture.md) and annotated at the affected fixture. As of the current release there are no such deviations.
+
+#### Which upstream version does it track?
+
+This release ports upstream **v2.5.1** (commit `b0879832`). The exact pin is recorded in [`NOTICE.md`](NOTICE.md) and updated whenever the port is re-synced.
+
+#### Is it safe to run on untrusted HTML?
+
+It is a converter, not a sanitizer. It strips script/style-type tags and emits Markdown rather than passing raw HTML through, but it is not designed as a security boundary. If you process hostile input, run it through a dedicated HTML sanitizer first.
+
+## Questions, bugs, and feature requests
+
+Have a usage question or something to discuss? Please use [Discussions](https://github.com/Kntnt/kntnt-html-to-markdown/discussions).
+
+Found a bug or want to request a feature? Please [open an issue](https://github.com/Kntnt/kntnt-html-to-markdown/issues). Search the existing issues first to avoid duplicates.
+
+## Extending
+
+The converter is built from plugins, and the same mechanism the built-in plugins use is available to you. A plugin is any class implementing the `Plugin` interface — a `name()` and an `init()` that registers behaviour — which you then pass to the `Converter` alongside the built-ins.
+
+### The registration surface
+
+Inside `init()`, a plugin registers behaviour through `$converter->register`:
+
+| Method | Registers |
+|---|---|
+| `preRenderer(fn, priority)` | A DOM transform run before rendering (rewrite or remove nodes). |
+| `renderer(fn, priority)` | A render handler tried per node until one returns `RenderStatus::Success`. |
+| `rendererFor(tag, type, fn, priority)` | A render handler guarded by a tag name, declaring its `TagType`. |
+| `postRenderer(fn, priority)` | A transform over the whole rendered Markdown string. |
+| `textTransformer(fn, priority)` | A transform applied to each text node. |
+| `escapedChar(...chars)` | Markdown-significant characters that must be escaped in text. |
+| `unEscaper(fn, priority)` | A context check deciding, per occurrence, whether an escape survives. |
+| `tagType(tag, type, priority)` | An explicit block/inline classification for a tag. |
+| `plugin(plugin)` | Another plugin this one depends on. |
+
+Handlers carry an integer **priority** — lower runs first — built from the `Priority` constants `EARLY` (100), `STANDARD` (500), and `LATE` (1000). Ties break on registration order, deterministically.
+
+### A custom plugin
+
+A render handler receives the context, an output `Buffer`, and the current node, and returns a `RenderStatus`: `Success` if it handled the node, or `TryNext` to fall through to the next handler. This example renders `<mark>` to `==…==` (a non-standard highlight syntax, used here only to show the shape):
+
+```php
+use Dom\Node;
+use Kntnt\HtmlToMarkdown\Converter\Buffer;
+use Kntnt\HtmlToMarkdown\Converter\Context;
+use Kntnt\HtmlToMarkdown\Converter\Converter;
+use Kntnt\HtmlToMarkdown\Converter\Plugin;
+use Kntnt\HtmlToMarkdown\Converter\Priority;
+use Kntnt\HtmlToMarkdown\Converter\RenderStatus;
+use Kntnt\HtmlToMarkdown\Dom\Dom;
+
+final class HighlightPlugin implements Plugin
+{
+    public function name(): string
+    {
+        return 'highlight';
+    }
+
+    public function init(Converter $converter): void
+    {
+        $converter->register->renderer($this->render(...), Priority::STANDARD);
+    }
+
+    private function render(Context $ctx, Buffer $w, Node $node): RenderStatus
+    {
+        if (Dom::nodeName($node) !== 'mark') {
+            return RenderStatus::TryNext;
+        }
+
+        $inner = new Buffer();
+        $ctx->renderChildNodes($ctx, $inner, $node);
+        $w->write('==' . $inner->bytes() . '==');
+
+        return RenderStatus::Success;
+    }
+}
+```
+
+Register it like any other plugin:
+
+```php
+$converter = new Converter([
+    new BasePlugin(),
+    new CommonmarkPlugin(),
+    new HighlightPlugin(),
+]);
+```
+
+The full design — the three-phase render loop, the escaping model, the tag-type system, and the Go→PHP module map — is documented in [`docs/architecture.md`](docs/architecture.md). Read it before writing anything that touches escaping or whitespace.
 
 ## Development
 
+### Build from source
+
 ```bash
+git clone https://github.com/Kntnt/kntnt-html-to-markdown.git
+cd kntnt-html-to-markdown
 composer install
-composer test        # Pest
+```
+
+There is nothing to compile — this is a pure PHP library. The Go reference is cloned into `.reference/` (git-ignored) and pinned to the tag recorded in [`NOTICE.md`](NOTICE.md); it is the specification the port is checked against.
+
+### Build a release artefact
+
+This package is distributed through [Packagist](https://packagist.org/packages/kntnt/html-to-markdown); a published Git tag is the release, and Composer builds the dist archive itself. The `.gitattributes` `export-ignore` rules keep that archive lean — tests, fixtures, CI config, and documentation are stripped, leaving only the runtime code and its licensing metadata. To reproduce the archive Composer would download:
+
+```bash
+git archive --format=tar.gz --prefix=kntnt-html-to-markdown/ -o kntnt-html-to-markdown.tar.gz HEAD
+```
+
+### Run tests
+
+The suite is data-driven and built on [Pest](https://pestphp.com/). Its backbone is the **golden-fixture** tests: upstream's `testdata` golden files are run through the exact converter wiring upstream uses and asserted byte-for-byte. Around them sit ported unit tables — the commonmark and table options and their validation errors, strikethrough cases, the facade, URL resolution and query encoding — plus a handful of edge cases. Static analysis and coding-style checks run alongside.
+
+```bash
+composer test        # Pest test suite
+composer test:coverage  # Pest with code coverage (needs pcov or Xdebug)
 composer stan        # PHPStan, level max
 composer cs          # PHP-CS-Fixer, PSR-12 (dry run)
 composer cs-fix      # PHP-CS-Fixer, apply fixes
 ```
 
-The Go reference is cloned into `.reference/` (git-ignored) and pinned to the tag recorded above; it is the specification against which the port is checked.
+All four run in CI on every push and pull request against PHP 8.5. New code is expected to keep the golden fixtures passing, stay green under PHPStan at level max, and conform to PSR-12.
 
-## Attribution and license
+### Technical documentation
 
-MIT, with dual copyright: Johannes Kaufmann for the original Go library, Thomas Barregren / Kntnt for the PHP port. The whitespace-collapsing code carries an additional Turndown / collapse-whitespace lineage. The full lineage is in [`NOTICE.md`](NOTICE.md); the license text is in [`LICENSE`](LICENSE).
+- [`docs/architecture.md`](docs/architecture.md) — the porting record: the full Go→PHP module map, the escaping model, the URL-resolution notes, and every bridged Go-vs-PHP implementation difference. Read this before changing the engine.
+- [`docs/coding-standards.md`](docs/coding-standards.md) — the project's coding standard.
+- [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) — entry points for AI coding agents working in the repository.
+- [`NOTICE.md`](NOTICE.md) — the upstream pin and the full licensing lineage.
+
+## How you can contribute
+
+Contributions are welcome, large or small. You can help by [opening an issue](https://github.com/Kntnt/kntnt-html-to-markdown/issues) to report a bug or request a feature, by sending a pull request with a fix or improvement, or by improving the documentation. Because **fidelity to the upstream Go library is the contract**, code contributions are expected to keep the golden fixtures passing byte-for-byte; if a change would alter output, explain why, and never weaken the converter to paper over a difference. When in doubt, open a discussion first.
+
+## Acknowledgements
+
+This library stands on the work of others. Thanks to **Johannes Kaufmann** for [`html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown), the Go library this is a port of; and to **Dom Christie** ([Turndown](https://github.com/mixmark-io/turndown)) and **Luc Thevenard** ([collapse-whitespace](https://github.com/wooorm/collapse-white-space)), whose whitespace-collapsing code lives on in the port's lineage. The full attribution chain is in [`NOTICE.md`](NOTICE.md).
+
+## License
+
+Released under the MIT License, with dual copyright: Johannes Kaufmann for the original Go library, and Thomas Barregren / Kntnt for the PHP port. The license text is in [`LICENSE`](LICENSE); the complete lineage and per-component attribution are in [`NOTICE.md`](NOTICE.md).
+
+## Changelog
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the release history. The project follows [Keep a Changelog](https://keepachangelog.com/) and [Semantic Versioning](https://semver.org/).
