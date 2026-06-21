@@ -175,7 +175,11 @@ Wherever PHP's HTML5 parser and Go's `x/net/html` agree, yes — upstream's gold
 
 #### Which upstream version does it track?
 
-This release ports upstream **v2.5.1** (commit `b0879832`). The exact pin is recorded in [`NOTICE.md`](NOTICE.md) and updated whenever the port is re-synced.
+This release ports upstream **v2.5.2** (commit `290df46`). The exact pin is recorded in [`NOTICE.md`](NOTICE.md) and updated whenever the port is re-synced.
+
+#### What about character encoding?
+
+Input is expected to be UTF-8 already. The converter parses with `Dom\HTMLDocument::createFromString($html, …, 'UTF-8')`, which forces UTF-8 and does not detect or convert other charsets — the same contract as the upstream Go library, whose `html.Parse()` requires UTF-8. If your HTML is in another charset (for example `ISO-8859-1` or `Windows-1252`), decode it to UTF-8 first; otherwise replacement characters (`�`) may appear in the output. When fetching over HTTP, the `Content-Type` header gives the charset; from a file you may need to read it from a `<meta>` tag or sniff the bytes. `mb_convert_encoding()` from `ext-mbstring` performs the conversion.
 
 #### Is it safe to run on untrusted HTML?
 

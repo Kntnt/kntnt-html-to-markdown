@@ -2,7 +2,7 @@
 
 This document is the porting record for `kntnt/html-to-markdown`. It maps every ported Go module to its PHP counterpart, explains the decisions where Go and PHP differ, and describes the escaping model in enough detail to maintain it. It is written for someone who knows the upstream Go library and wants to understand how the PHP port stays faithful to it.
 
-The port targets upstream **v2.5.1** (commit `b0879832`). That pin is recorded in `NOTICE.md` and `README.md`; re-syncing means bumping it and re-porting any changed fixtures.
+The port targets upstream **v2.5.2** (commit `290df46`). That pin is recorded in `NOTICE.md` and `README.md`; re-syncing means bumping it and re-porting any changed fixtures.
 
 ## Fidelity is the contract
 

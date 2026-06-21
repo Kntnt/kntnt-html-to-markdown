@@ -6,7 +6,7 @@ This product includes software developed by Johannes Kaufmann and contributors. 
 
 ## Upstream pin
 
-This release ports upstream **v2.5.1** (commit `b0879832e6124221dfe878695391af0e37ec112a`). Re-syncing with upstream means bumping this pin and re-porting any changed golden fixtures.
+This release ports upstream **v2.5.2** (commit `290df46a279e3d7d9011dbbb199658dfcb5ec272`). Re-syncing with upstream means bumping this pin and re-porting any changed golden fixtures.
 
 ## Lineage and copyright
 

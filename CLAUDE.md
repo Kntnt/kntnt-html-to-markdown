@@ -27,3 +27,8 @@ The full Go→PHP module mapping, the escaping notes, and the bridged Go-vs-PHP 
 - **Upstream pin:** the exact ported upstream tag/commit is recorded in `NOTICE.md` and `README.md`. Re-syncing with upstream means bumping that pin and re-porting any changed fixtures.
 - **License:** MIT, with dual copyright (Johannes Kaufmann for the original, Thomas Barregren / Kntnt for the PHP port). `NOTICE.md` carries the full lineage, including the Turndown / collapse-whitespace ancestry of the whitespace-collapse code.
 - **Tooling:** Composer, Pest, PHPStan `--level max`, pcov, PHP-CS-Fixer (PSR-12). No DDEV — this is a pure library with no server component.
+
+## Release configuration
+
+- **Version locations:** the `CHANGELOG.md` latest heading and the Git tag `vX.Y.Z` only. There is deliberately **no** `version` field in `composer.json` — Composer derives the version from the published Git tag, and that tag is the single source of truth.
+- **Build:** none. The package is distributed through Packagist; a published Git tag *is* the release, and Composer builds the dist archive itself (kept lean by the `export-ignore` rules in `.gitattributes`). The GitHub release carries notes only, no attached artifact.

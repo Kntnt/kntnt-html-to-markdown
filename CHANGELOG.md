@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-21
+
+### Changed
+
+- Bumped the documented upstream pin from v2.5.1 to v2.5.2. The ported engine is byte-for-byte unchanged: upstream's v2.5.2 release consists solely of documentation and Go-dependency updates, none of which touch the converter, the plugins, or the golden fixtures.
+- Documented character-encoding expectations in the README FAQ. Input is expected to be UTF-8; the converter forces UTF-8 when parsing and does not detect or convert other charsets. Decode non-UTF-8 HTML (for example with `mb_convert_encoding()`) before passing it in.
+
 ## [0.1.1] - 2026-06-04
 
 ### Added
@@ -34,6 +41,7 @@ Initial release. A faithful PHP 8.5 port of `JohannesKaufmann/html-to-markdown` 
 - Task lists, autolinks, and the GFM tagfilter are intentionally **not** implemented.
 - HTML is parsed with PHP's native `Dom\HTMLDocument` (HTML5). Any place where this legitimately differs from Go's `x/net/html` is documented in `docs/architecture.md` and annotated at the affected fixture.
 
-[Unreleased]: https://github.com/Kntnt/kntnt-html-to-markdown/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Kntnt/kntnt-html-to-markdown/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/Kntnt/kntnt-html-to-markdown/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Kntnt/kntnt-html-to-markdown/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Kntnt/kntnt-html-to-markdown/releases/tag/v0.1.0
