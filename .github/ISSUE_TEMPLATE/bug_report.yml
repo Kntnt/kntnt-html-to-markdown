@@ -64,7 +64,7 @@ body:
     attributes:
       label: PHP version
       description: Run `php -v` (the first line).
-      placeholder: "8.5.0"
+      placeholder: "8.4.0"
     validations:
       required: true
 

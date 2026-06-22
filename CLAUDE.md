@@ -8,21 +8,21 @@ Guidance for AI coding agents (Claude Code, Copilot, Cursor, Codex, …) working
 
 ## Project context
 
-`kntnt/html-to-markdown` is a dependency-free PHP 8.5 library that converts HTML into GitHub Flavored Markdown. It is a faithful port of the Go library [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) (v2) — specifically its `converter` core and the `base`, `commonmark`, `strikethrough`, and `table` plugins. The upstream CLI, the hosted REST API / demo, and task-list handling are deliberately out of scope. The package is consumed by other Kntnt projects via Composer (for example, to serve per-page Markdown to LLMs).
+`kntnt/html-to-markdown` is a dependency-free PHP 8.4 library that converts HTML into GitHub Flavored Markdown. It is a faithful port of the Go library [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) (v2) — specifically its `converter` core and the `base`, `commonmark`, `strikethrough`, and `table` plugins. The upstream CLI, the hosted REST API / demo, and task-list handling are deliberately out of scope. The package is consumed by other Kntnt projects via Composer (for example, to serve per-page Markdown to LLMs).
 
 ## Architecture
 
 The full Go→PHP module mapping, the escaping notes, and the bridged Go-vs-PHP implementation differences live in `docs/architecture.md` — read it before changing the engine. The load-bearing decisions are:
 
 - **Parser:** PHP's native `Dom\HTMLDocument` (HTML5-compliant, with `querySelectorAll`) replaces both Go's `golang.org/x/net/html` and `cascadia`. No `Masterminds/html5`; no legacy `DOMDocument` (it mangles HTML5).
-- **Zero runtime dependencies.** Every upstream dependency maps to a PHP built-in: `Dom\*`, `levenshtein()`, `mbstring`, and `Uri\Rfc3986\Uri` (PHP 8.5) for `withDomain` URL resolution.
+- **Zero runtime dependencies.** Every upstream dependency maps to a PHP built-in: `Dom\*`, `levenshtein()`, and `mbstring`. `withDomain` URL resolution is a hand-ported RFC 3986 §5.2 reference resolver (no PHP-8.5-only `Uri\Rfc3986\Uri`), so the floor stays at 8.4.
 - **Plugin / renderer model, ported faithfully.** A `Plugin` registers renderers per HTML tag with priorities; a `TagType` enum (block / inline) drives whitespace collapsing; before/after hooks transform the DOM and the final Markdown. The external interface is deep: a `Converter` plus a thin `HtmlToMarkdown::convert()` convenience facade (the analogue of Go's `ConvertString`).
 - **Escaping** follows upstream's `ESCAPING.md` (smart, context-aware escaping) — the single most fidelity-critical component. Upstream's internal sentinel markers (the bell character and private-use runes) are ported as byte markers.
 - **Errors:** Go's error returns become thrown exceptions under `\Kntnt\HtmlToMarkdown\Exception`.
 
 ## Project-specific conventions
 
-- **Identity:** namespace `\Kntnt\HtmlToMarkdown`; Composer package `kntnt/html-to-markdown`; PSR-4 source in `src/`. PHP **8.5** floor, pragmatically modern — no back-compatibility shims.
+- **Identity:** namespace `\Kntnt\HtmlToMarkdown`; Composer package `kntnt/html-to-markdown`; PSR-4 source in `src/`. PHP **8.4** floor (from the native `Dom\HTMLDocument` HTML5 parser), pragmatically modern — no back-compatibility shims.
 - **Fidelity is the contract.** Upstream's golden fixtures (`testdata/*/GoldenFiles`) are ported into the Pest suite and asserted byte-for-byte. Deviate only where PHP's HTML5 parser legitimately differs from `x/net/html`; document every such deviation in `docs/architecture.md` and annotate it at the fixture. Never weaken the converter to paper over a parser difference.
 - **Upstream pin:** the exact ported upstream tag/commit is recorded in `NOTICE.md` and `README.md`. Re-syncing with upstream means bumping that pin and re-porting any changed fixtures.
 - **License:** MIT, with dual copyright (Johannes Kaufmann for the original, Thomas Barregren / Kntnt for the PHP port). `NOTICE.md` carries the full lineage, including the Turndown / collapse-whitespace ancestry of the whitespace-collapse code.

@@ -35,6 +35,22 @@ test('relative and absolute URLs resolve like upstream', function (string $tagNa
     'brackets inside link #2' => ['a', '[foo](uri)', '', '%5Bfoo%5D%28uri%29'],
 ]);
 
+// Fidelity tests for the hand-ported RFC 3986 §5.2 reference resolution
+// (resolveReference / mergePath / removeDotSegments). Upstream's fixtures only
+// resolve absolute-path references, so these cover the relative-reference and
+// dot-segment paths; every expected value is what Go's net/url produces.
+test('relative references resolve against the base domain like Go net/url', function (string $tagName, string $input, string $domain, string $expected): void {
+    expect(UrlResolver::assembleAbsoluteUrl($tagName, $input, $domain))->toBe($expected);
+})->with([
+    'relative reference merged onto base path' => ['a', 'baz.html', 'https://test.com/foo/bar', 'https://test.com/foo/baz.html'],
+    'current-directory segment is dropped' => ['a', './page.html', 'https://test.com/a/b', 'https://test.com/a/page.html'],
+    'parent segment climbs one level' => ['a', '../images/logo.png', 'https://test.com/foo/bar/', 'https://test.com/foo/images/logo.png'],
+    'excess parent segments clamp at root' => ['a', '../../../etc', 'https://test.com/a', 'https://test.com/etc'],
+    'protocol-relative reference keeps its own authority' => ['a', '//cdn.example.com/lib.js', 'https://test.com', 'https://cdn.example.com/lib.js'],
+    'query-only reference replaces the base query' => ['a', '?x=1', 'https://test.com/page', 'https://test.com/page?x=1'],
+    'fragment-only reference inherits the base query' => ['a', '#frag', 'https://test.com/p?base=1', 'https://test.com/p?base=1#frag'],
+]);
+
 // Ported from upstream's converter TestParseAndEncodeQuery.
 test('query strings are re-encoded while preserving order', function (string $input, string $expected): void {
     expect(UrlResolver::parseAndEncodeQuery($input))->toBe($expected);

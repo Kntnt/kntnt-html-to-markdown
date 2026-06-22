@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.3] – 2026-06-22
+
+### Changed
+
+- Lowered the PHP floor from 8.5 to 8.4. Relative-URL resolution no longer uses the PHP-8.5-only `Uri\Rfc3986\Uri` extension; `UrlResolver` now hand-ports RFC 3986 §5.2 reference resolution (mirroring Go's `net/url`), with byte-for-byte-identical output verified by the golden fixtures. The remaining floor driver is the native `Dom\HTMLDocument` HTML5 parser, which requires PHP 8.4. CI and PHPStan's `phpVersion` now target 8.4.
+
 ## [0.1.2] - 2026-06-21
 
 ### Changed
@@ -41,7 +47,8 @@ Initial release. A faithful PHP 8.5 port of `JohannesKaufmann/html-to-markdown` 
 - Task lists, autolinks, and the GFM tagfilter are intentionally **not** implemented.
 - HTML is parsed with PHP's native `Dom\HTMLDocument` (HTML5). Any place where this legitimately differs from Go's `x/net/html` is documented in `docs/architecture.md` and annotated at the affected fixture.
 
-[Unreleased]: https://github.com/Kntnt/kntnt-html-to-markdown/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/Kntnt/kntnt-html-to-markdown/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/Kntnt/kntnt-html-to-markdown/releases/tag/v0.1.3
 [0.1.2]: https://github.com/Kntnt/kntnt-html-to-markdown/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Kntnt/kntnt-html-to-markdown/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Kntnt/kntnt-html-to-markdown/releases/tag/v0.1.0

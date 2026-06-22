@@ -41,7 +41,7 @@ The package has **zero runtime dependencies**. Every upstream dependency maps to
 | `golang.org/x/net/html` (parser) | `Dom\HTMLDocument` (HTML5, lexbor) |
 | `github.com/andybalholm/cascadia` (CSS selectors) | `Dom\*::querySelectorAll` |
 | `github.com/JohannesKaufmann/dom` | `Dom\Node` navigation (ported in `src/Dom`) |
-| `net/url` (URL resolution) | `Uri\Rfc3986\Uri` (PHP 8.5) + hand-ported query encoding |
+| `net/url` (URL resolution) | hand-ported RFC 3986 §5.2 resolution + query encoding |
 | `unicode/utf8`, `unicode` | `mbstring`, PCRE with the `u` flag |
 
 ## The DOM model: Go nodes vs. PHP nodes
@@ -76,7 +76,7 @@ When a node is emitted as raw HTML (kept comments via `Renderers::renderAsHtml`,
 
 `UrlResolver` ports `converter/url.go`. Two Go-specific behaviours need care:
 
-- **Lenient decomposition.** Go's `net/url.Parse` is lenient — it accepts raw spaces and other characters in the query and opaque parts (so a `mailto:` with a `subject=Greetings to Johannes` parses, and the query is then re-encoded). PHP's `Uri\Rfc3986\Uri` is strict RFC 3986 and rejects those inputs. The port therefore splits a URL into scheme / authority / path / query / fragment with the lenient RFC 3986 reference grammar (a regex), and uses `Uri\Rfc3986\Uri` only for the one step that needs real resolution semantics: resolving a *relative* URL against the base domain (`Options::$domain`), where the inputs are well-formed. This reproduces Go's results, including the cases where Go returns an error and falls back to plain percent-encoding (a space in a host, brackets in a path): the regex parses them, but the final percent-encoding pass yields the same bytes.
+- **Lenient decomposition.** Go's `net/url.Parse` is lenient — it accepts raw spaces and other characters in the query and opaque parts (so a `mailto:` with a `subject=Greetings to Johannes` parses, and the query is then re-encoded). The port therefore splits a URL into scheme / authority / path / query / fragment with the lenient RFC 3986 reference grammar (a regex), then — only when resolving a *relative* URL against the base domain (`Options::$domain`) — runs a hand-ported RFC 3986 §5.2 reference resolution (`resolveReference` / `mergePath` / `removeDotSegments`, mirroring Go's `url.URL::ResolveReference`). This keeps the converter free of any PHP-8.5-only `Uri\Rfc3986\Uri` extension, so it runs on PHP 8.4. It reproduces Go's results, including the cases where Go falls back to plain percent-encoding (a space in a host, brackets in a path): the regex parses them, and the final percent-encoding pass yields the same bytes.
 - **Hand-ported query encoding.** The query re-encoding (`ParseAndEncodeQuery`) preserves parameter order and re-encodes each component with Go's `url.QueryUnescape` / `url.QueryEscape` semantics — including the quirk that a token which fails to decode (e.g. a lone `%`) is left untouched, and that a space becomes `+` and is then rewritten to `%20`. These are ported by hand (`queryUnescape` / `queryEscape`) rather than using PHP's `urlencode`, whose character set and error handling differ from Go's.
 
 ## Plugin / renderer model

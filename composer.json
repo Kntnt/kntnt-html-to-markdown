@@ -1,6 +1,6 @@
 {
     "name": "kntnt/html-to-markdown",
-    "description": "A dependency-free PHP 8.5 library that converts HTML into GitHub Flavored Markdown. A faithful port of the Go library JohannesKaufmann/html-to-markdown (v2).",
+    "description": "A dependency-free PHP 8.4 library that converts HTML into GitHub Flavored Markdown. A faithful port of the Go library JohannesKaufmann/html-to-markdown (v2).",
     "type": "library",
     "license": "MIT",
     "keywords": [
@@ -23,7 +23,7 @@
         }
     ],
     "require": {
-        "php": ">=8.5",
+        "php": ">=8.4",
         "ext-dom": "*",
         "ext-mbstring": "*"
     },

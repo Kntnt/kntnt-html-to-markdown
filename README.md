@@ -5,13 +5,13 @@
 [![Latest release](https://img.shields.io/packagist/v/kntnt/html-to-markdown)](https://packagist.org/packages/kntnt/html-to-markdown)
 [![CI](https://github.com/Kntnt/kntnt-html-to-markdown/actions/workflows/ci.yml/badge.svg)](https://github.com/Kntnt/kntnt-html-to-markdown/actions/workflows/ci.yml)
 
-A dependency-free PHP 8.5 library that converts HTML into [GitHub Flavored Markdown](https://github.github.com/gfm/) (GFM). If you need to turn HTML into clean, predictable Markdown — to feed page content to an LLM, archive content portably, or render it elsewhere — and you want output that matches a battle-tested reference implementation, this is for you.
+A dependency-free PHP 8.4 library that converts HTML into [GitHub Flavored Markdown](https://github.github.com/gfm/) (GFM). If you need to turn HTML into clean, predictable Markdown — to feed page content to an LLM, archive content portably, or render it elsewhere — and you want output that matches a battle-tested reference implementation, this is for you.
 
 ## Description
 
 `kntnt/html-to-markdown` is a faithful PHP port of the Go library [`JohannesKaufmann/html-to-markdown`](https://github.com/JohannesKaufmann/html-to-markdown) (v2). It ports the converter core and the `base`, `commonmark`, `strikethrough`, and `table` plugins, reproducing the Go library's output **byte-for-byte**: upstream's golden test fixtures are asserted character-for-character by the test suite.
 
-It has **zero runtime dependencies**. Every dependency the Go library reaches for maps onto a PHP built-in — `Dom\HTMLDocument` for HTML5 parsing and CSS selectors, `mbstring` for text handling, and `Uri\Rfc3986\Uri` for relative-URL resolution — so the package drops into any PHP 8.5 project without dragging in a dependency tree or risking version conflicts. It is used by other Kntnt projects via Composer.
+It has **zero runtime dependencies**. Every dependency the Go library reaches for maps onto a PHP built-in — `Dom\HTMLDocument` for HTML5 parsing and CSS selectors and `mbstring` for text handling — with relative-URL resolution hand-ported from RFC 3986, so the package drops into any PHP 8.4 project without dragging in a dependency tree or risking version conflicts. It is used by other Kntnt projects via Composer.
 
 ### Key Features
 
@@ -31,18 +31,18 @@ More and more PHP applications need Markdown out of HTML, and the naive approach
 
 ### How this library helps
 
-Rather than inventing yet another converter, this library ports a mature, widely used, well-tested one — `JohannesKaufmann/html-to-markdown` — and holds itself to that reference byte-for-byte. You get GitHub Flavored Markdown out of the box: headings, emphasis, links, images, code, blockquotes, lists, thematic breaks, hard breaks, comments, GFM tables, and strikethrough. Relative URLs can be resolved against a base domain, conversion can be scoped to part of a document, and escaping is handled by a two-phase, context-aware model that decides *per occurrence* whether a character needs a backslash. Because it has zero runtime dependencies, it installs cleanly into any PHP 8.5 codebase.
+Rather than inventing yet another converter, this library ports a mature, widely used, well-tested one — `JohannesKaufmann/html-to-markdown` — and holds itself to that reference byte-for-byte. You get GitHub Flavored Markdown out of the box: headings, emphasis, links, images, code, blockquotes, lists, thematic breaks, hard breaks, comments, GFM tables, and strikethrough. Relative URLs can be resolved against a base domain, conversion can be scoped to part of a document, and escaping is handled by a two-phase, context-aware model that decides *per occurrence* whether a character needs a backslash. Because it has zero runtime dependencies, it installs cleanly into any PHP 8.4 codebase.
 
 ### Limitations
 
 - **No task lists.** This is the one deliberate gap in GFM coverage: a checkbox list item (`<li><input type="checkbox">…`) is rendered as a plain list item, not `- [ ]` / `- [x]`. Task lists are out of scope upstream too.
 - **Autolinks and the tagfilter do not apply.** Both are *parsing* features that act on Markdown input; when the input is HTML there is nothing for them to do. See [Supported Markdown](#supported-markdown) for the details.
 - **It is a converter, not a sanitizer.** It emits Markdown (and strips script/style/iframe-style tags in the process), but it is not designed or audited as a security boundary against hostile HTML. Sanitize untrusted input separately if that is your threat model.
-- **PHP 8.5+ only.** The port uses modern language and standard-library features (including `Uri\Rfc3986\Uri`) and carries no back-compatibility shims for older PHP.
+- **PHP 8.4+ only.** The port uses modern language and standard-library features (notably `Dom\HTMLDocument`, the native HTML5 parser added in 8.4) and carries no back-compatibility shims for older PHP.
 
 ## Requirements
 
-- PHP **8.5** or newer
+- PHP **8.4** or newer
 - `ext-dom` and `ext-mbstring` (both bundled with virtually every PHP build)
 
 ## Installation
@@ -165,9 +165,9 @@ The project follows [Semantic Versioning](https://semver.org/), so patch and min
 
 No. Rendering a checkbox `<li>` as `- [ ]` / `- [x]` is the single deliberate gap in GFM coverage; the item is emitted as a plain list item instead. This matches the upstream Go library, where task lists are also out of scope.
 
-#### Why does it require PHP 8.5?
+#### Why does it require PHP 8.4?
 
-The port leans on modern PHP, including the `Uri\Rfc3986\Uri` class introduced in 8.5 for relative-URL resolution. Keeping a single, modern floor avoids back-compatibility shims and keeps the code close to the Go original.
+The port leans on modern PHP — most load-bearingly the native `Dom\HTMLDocument` HTML5 parser introduced in 8.4, which replaces Go's `x/net/html`. Keeping a single, modern floor avoids back-compatibility shims and keeps the code close to the Go original. (Relative-URL resolution is hand-ported from RFC 3986, so it needs no PHP-8.5-only `Uri\Rfc3986\Uri` extension.)
 
 #### Is the output really identical to the Go library?
 
@@ -298,7 +298,7 @@ composer cs          # PHP-CS-Fixer, PSR-12 (dry run)
 composer cs-fix      # PHP-CS-Fixer, apply fixes
 ```
 
-All four run in CI on every push and pull request against PHP 8.5. New code is expected to keep the golden fixtures passing, stay green under PHPStan at level max, and conform to PSR-12.
+All four run in CI on every push and pull request against PHP 8.4. New code is expected to keep the golden fixtures passing, stay green under PHPStan at level max, and conform to PSR-12.
 
 ### Technical documentation
 

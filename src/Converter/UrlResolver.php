@@ -5,17 +5,15 @@ declare(strict_types=1);
 namespace Kntnt\HtmlToMarkdown\Converter;
 
 use Kntnt\HtmlToMarkdown\Internal\TextUtils\TextUtils;
-use Uri\Rfc3986\Uri;
 
 /**
  * Turns the URLs found in links and images into Markdown-safe absolute URLs.
  *
- * This ports upstream's `converter/url.go`. The parsing and reference
- * resolution use PHP 8.5's native {@see Uri}, which tracks Go's `net/url`
- * closely — it even rejects the same malformed inputs (returning null where
- * Go returns an error), so both fall back to plain percent-encoding in
- * exactly the same cases. The query re-encoding and the final
- * percent-encoding pass are ported by hand to keep the byte output identical.
+ * This ports upstream's `converter/url.go`. Parsing, RFC 3986 §5.2 reference
+ * resolution, query re-encoding and the final percent-encoding pass are all
+ * ported by hand to keep the byte output identical to Go's `net/url`, with no
+ * external dependency — so the converter needs no PHP-8.5-only
+ * `Uri\Rfc3986\Uri` and runs on PHP 8.4.
  *
  * @since 0.1.0
  */
@@ -48,11 +46,12 @@ final class UrlResolver
      * URIs are passed straight to percent-encoding, matching upstream's
      * short-circuits.
      *
-     * The URL is decomposed with the lenient RFC 3986 reference grammar rather
-     * than the strict {@see Uri} parser, because Go's `net/url` (which this
-     * ports) accepts raw spaces and other characters in the query and opaque
-     * parts. {@see Uri} is still used for reference resolution against the
-     * base domain, where the inputs are well-formed.
+     * The URL is decomposed with the lenient RFC 3986 reference grammar,
+     * because Go's `net/url` (which this ports) accepts raw spaces and other
+     * characters in the query and opaque parts. Reference resolution against
+     * the base domain is a hand-rolled port of RFC 3986 §5.2 (see
+     * {@see resolveReference}), so the converter carries no PHP-8.5-only
+     * `Uri\Rfc3986\Uri` dependency.
      *
      * @since 0.1.0
      */
@@ -84,18 +83,14 @@ final class UrlResolver
             $query = str_replace('+', '%20', self::parseAndEncodeQuery($query));
         }
 
-        $assembled = self::recompose($scheme, $authority, $path, $query, $fragment);
-
-        // Resolve a relative URL against the base domain, when one is given.
+        // Resolve a relative reference against the base domain when one is
+        // given; otherwise keep the decomposed components as they are.
         $base = $scheme === null ? self::parseBaseDomain($domain) : null;
         if ($base !== null) {
-            $resolved = self::tryParse($assembled);
-            if ($resolved !== null) {
-                $assembled = $base->resolve($resolved->toRawString())->toRawString();
-            }
+            [$scheme, $authority, $path, $query, $fragment] = self::resolveReference($base, $authority, $path, $query, $fragment);
         }
 
-        return self::percentEncode($assembled);
+        return self::percentEncode(self::recompose($scheme, $authority, $path, $query, $fragment));
     }
 
     /**
@@ -255,24 +250,31 @@ final class UrlResolver
     }
 
     /**
-     * Parses a base domain into a {@see Uri}, adding an `http://` scheme when
-     * the raw value is just a host (e.g. "test.com").
+     * Parses a base domain into its RFC 3986 components, adding an `http://`
+     * scheme when the raw value is just a host (e.g. "test.com").
+     *
+     * Returns null when the value yields no authority host, matching Go's
+     * `parseBaseDomain`, which rejects a base without a `Host`.
      *
      * @since 0.1.0
+     *
+     * @return array{0: ?string, 1: ?string, 2: string, 3: ?string, 4: ?string}|null
      */
-    private static function parseBaseDomain(string $rawDomain): ?Uri
+    private static function parseBaseDomain(string $rawDomain): ?array
     {
         if ($rawDomain === '') {
             return null;
         }
 
-        $first = self::tryParse($rawDomain);
-        if ($first !== null && ($first->getRawHost() ?? '') !== '') {
+        // Accept the value as given when it already carries an authority host.
+        $first = self::decompose($rawDomain);
+        if (self::hostPort($first[1]) !== '') {
             return $first;
         }
 
-        $second = self::tryParse('http://' . $rawDomain);
-        if ($second !== null && ($second->getRawHost() ?? '') !== '') {
+        // Otherwise retry with a fallback scheme so a bare host gains an authority.
+        $second = self::decompose('http://' . $rawDomain);
+        if (self::hostPort($second[1]) !== '') {
             return $second;
         }
 
@@ -280,17 +282,132 @@ final class UrlResolver
     }
 
     /**
-     * Parses a URL, returning null on failure (the analogue of Go's error).
+     * Extracts the `host[:port]` part of an authority, dropping any
+     * `userinfo@` prefix — the analogue of Go's `url.URL::Host`.
      *
      * @since 0.1.0
      */
-    private static function tryParse(string $value): ?Uri
+    private static function hostPort(?string $authority): string
     {
-        try {
-            return Uri::parse($value);
-        } catch (\Throwable) {
-            return null;
+        if ($authority === null) {
+            return '';
         }
+
+        $at = strrpos($authority, '@');
+
+        return $at === false ? $authority : substr($authority, $at + 1);
+    }
+
+    /**
+     * Resolves a relative reference against a base URL per RFC 3986 §5.2.2.
+     *
+     * The reference never carries a scheme here — callers resolve only when the
+     * raw URL was relative — so this is the "scheme undefined" branch of the
+     * transform, a hand port of Go's `url.URL::ResolveReference`.
+     *
+     * @since 0.1.0
+     *
+     * @param array{0: ?string, 1: ?string, 2: string, 3: ?string, 4: ?string} $base
+     *
+     * @return array{0: ?string, 1: ?string, 2: string, 3: ?string, 4: ?string}
+     */
+    private static function resolveReference(array $base, ?string $refAuthority, string $refPath, ?string $refQuery, ?string $refFragment): array
+    {
+        [$baseScheme, $baseAuthority, $basePath, $baseQuery] = $base;
+
+        // A reference authority replaces the base authority wholesale.
+        if ($refAuthority !== null) {
+            return [$baseScheme, $refAuthority, self::removeDotSegments($refPath), $refQuery, $refFragment];
+        }
+
+        // An empty reference path keeps the base path (and the base query when
+        // the reference has none); any other path resolves against the base.
+        if ($refPath === '') {
+            $path = $basePath;
+            $query = $refQuery ?? $baseQuery;
+        } else {
+            $path = str_starts_with($refPath, '/')
+                ? self::removeDotSegments($refPath)
+                : self::removeDotSegments(self::mergePath($baseAuthority, $basePath, $refPath));
+            $query = $refQuery;
+        }
+
+        return [$baseScheme, $baseAuthority, $path, $query, $refFragment];
+    }
+
+    /**
+     * Merges a relative-reference path onto the base path per RFC 3986 §5.2.3.
+     *
+     * @since 0.1.0
+     */
+    private static function mergePath(?string $baseAuthority, string $basePath, string $refPath): string
+    {
+        // A base with an authority but an empty path roots the reference.
+        if ($baseAuthority !== null && $basePath === '') {
+            return '/' . $refPath;
+        }
+
+        // Otherwise replace everything after the base's last segment.
+        $slash = strrpos($basePath, '/');
+
+        return $slash === false ? $refPath : substr($basePath, 0, $slash + 1) . $refPath;
+    }
+
+    /**
+     * Removes `.` and `..` segments from a path per RFC 3986 §5.2.4.
+     *
+     * @since 0.1.0
+     */
+    private static function removeDotSegments(string $path): string
+    {
+        $input = $path;
+        $output = '';
+
+        while ($input !== '') {
+            if (str_starts_with($input, '../')) {
+                $input = substr($input, 3);
+            } elseif (str_starts_with($input, './')) {
+                $input = substr($input, 2);
+            } elseif (str_starts_with($input, '/./')) {
+                $input = '/' . substr($input, 3);
+            } elseif ($input === '/.') {
+                $input = '/';
+            } elseif (str_starts_with($input, '/../')) {
+                $input = '/' . substr($input, 4);
+                $output = self::removeLastSegment($output);
+            } elseif ($input === '/..') {
+                $input = '/';
+                $output = self::removeLastSegment($output);
+            } elseif ($input === '.' || $input === '..') {
+                $input = '';
+            } else {
+                // Move the first path segment, with any leading slash, to output.
+                $start = str_starts_with($input, '/') ? 1 : 0;
+                $next = strpos($input, '/', $start);
+                if ($next === false) {
+                    $output .= $input;
+                    $input = '';
+                } else {
+                    $output .= substr($input, 0, $next);
+                    $input = substr($input, $next);
+                }
+            }
+        }
+
+        return $output;
+    }
+
+    /**
+     * Drops the last segment (and its preceding slash) from an output buffer,
+     * the helper {@see removeDotSegments} uses for `..` handling.
+     *
+     * @since 0.1.0
+     */
+    private static function removeLastSegment(string $output): string
+    {
+        $slash = strrpos($output, '/');
+
+        return $slash === false ? '' : substr($output, 0, $slash);
     }
 
     /**
