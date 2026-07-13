@@ -1,22 +1,15 @@
 name: Upstream watch
 
-# Watches upstream JohannesKaufmann/html-to-markdown for movement past the
-# version this port is pinned to (in NOTICE.md), in two decoupled jobs:
+# The durable, Claude-independent alert. Weekly (and on-demand) it checks whether
+# upstream JohannesKaufmann/html-to-markdown has moved past the version this port
+# is pinned to in NOTICE.md, and opens a single tracking issue when it has. Needs
+# no secrets and no Claude, so every collaborator gets the alert regardless — and
+# because the issue is authored by github-actions[bot], anyone watching the repo
+# at "Custom -> Issues" is emailed reliably (GitHub does not self-notify authors).
 #
-#   check   The durable alert. Detects a moved main or a newer tag and opens a
-#           single tracking issue. No secrets, no Claude — always runs. This is
-#           what every collaborator gets, whether or not they use Claude.
-#
-#   assess  An optional layer that saves the maintainer manual triage. When a
-#           NEW issue is opened, it has Claude read the upstream diff, classify
-#           each change against the port's scope, and comment its verdict. Gated
-#           on the ANTHROPIC_API_KEY secret: absent it skips silently and the
-#           plain alert from `check` still stands.
-#
-# The jobs are coupled by `needs` rather than a label event on purpose: GitHub
-# does not re-trigger workflows from GITHUB_TOKEN-driven events, so a
-# cross-workflow label trigger would need a long-lived PAT. A gated second job
-# needs no extra credential.
+# The portability assessment is handled separately by a Claude Code Routine, which
+# polls for a fresh upstream-sync issue and comments its verdict — billed on the
+# maintainer's Claude plan, so no ANTHROPIC_API_KEY lives here.
 
 on:
   schedule:
@@ -32,10 +25,6 @@ jobs:
   check:
     name: Check upstream for changes past the pin
     runs-on: ubuntu-latest
-    outputs:
-      moved: ${{ steps.detect.outputs.moved }}
-      created: ${{ steps.issue.outputs.created }}
-      issue: ${{ steps.issue.outputs.number }}
 
     steps:
       - name: Checkout
@@ -88,7 +77,6 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Open or update the tracking issue
-        id: issue
         if: steps.detect.outputs.moved == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -101,13 +89,14 @@ jobs:
           set -euo pipefail
 
           # Self-contained: create the tracking label if the repo does not have it
-          # yet. It identifies the issue for idempotency and human filtering.
+          # yet. It identifies the issue for idempotency and human filtering, and is
+          # what the Claude Code Routine looks for.
           gh label create upstream-sync \
             --description "Upstream html-to-markdown has moved past the pinned version" \
             --color 1D76DB 2>/dev/null || true
 
           # Assemble the issue body: the facts, a ready-made compare link, and the
-          # scope rules a human (or Claude) needs to decide what to port.
+          # scope rules a human (or the Routine) needs to decide what to port.
           title="Upstream moved past ${PINNED_TAG} — evaluate for porting"
           body="$(cat <<EOF
           Upstream [\`JohannesKaufmann/html-to-markdown\`](https://github.com/JohannesKaufmann/html-to-markdown) has moved past the version this port is pinned to.
@@ -133,86 +122,12 @@ jobs:
           )"
 
           # Idempotent: one open issue per pin. Refresh its body if it exists;
-          # otherwise create it. `created` gates the assessment job so Claude
-          # comments once on discovery, not on every weekly refresh.
+          # otherwise create it. The Claude Code Routine adds the assessment comment.
           existing="$(gh issue list --state open --label upstream-sync --json number --jq '.[0].number // empty')"
           if [ -n "$existing" ]; then
             gh issue edit "$existing" --body "$body"
             echo "Refreshed existing issue #$existing"
-            echo "created=false" >> "$GITHUB_OUTPUT"
-            echo "number=$existing" >> "$GITHUB_OUTPUT"
           else
             url="$(gh issue create --title "$title" --label upstream-sync --body "$body")"
-            number="$(printf '%s' "$url" | grep -oE '[0-9]+$')"
-            echo "Created issue #$number"
-            echo "created=true" >> "$GITHUB_OUTPUT"
-            echo "number=$number" >> "$GITHUB_OUTPUT"
+            echo "Created issue: $url"
           fi
-
-  assess:
-    name: Claude portability assessment
-    needs: check
-    # Only when a brand-new tracking issue was opened — assess once on discovery,
-    # never on the weekly refresh of an already-open issue.
-    if: needs.check.outputs.created == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
-
-    steps:
-      - name: Guard on API-key presence
-        id: guard
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          # The secret is this layer's on/off switch. Without it, skip silently —
-          # the issue alert from the check job is already posted.
-          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-            echo "No ANTHROPIC_API_KEY secret set — skipping assessment."
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Checkout
-        if: steps.guard.outputs.enabled == 'true'
-        uses: actions/checkout@v5
-
-      - name: Assess the upstream diff and comment on the issue
-        if: steps.guard.outputs.enabled == 'true'
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ github.token }}
-          claude_args: '--allowedTools Bash,Read,Grep,Glob --max-turns 25'
-          prompt: |
-            You are triaging whether an upstream release of the Go library
-            `JohannesKaufmann/html-to-markdown` needs porting into this PHP port.
-            Work non-interactively and finish by posting exactly one comment on
-            GitHub issue #${{ needs.check.outputs.issue }} in this repository.
-
-            Steps:
-            1. Read `NOTICE.md` to get the pinned upstream commit SHA and tag.
-            2. Get the upstream diff since the pin, e.g.:
-               `gh api repos/JohannesKaufmann/html-to-markdown/compare/<pinned_sha>...main`
-               to list changed files, and inspect individual changes as needed.
-            3. Classify every changed file against this port's scope, documented in
-               `docs/architecture.md`:
-               - IN SCOPE (must be ported): the `converter` core; the `base`,
-                 `commonmark`, `strikethrough`, and `table` plugins; `ESCAPING.md`
-                 and `internal/escape`; the golden fixtures of those plugins.
-               - OUT OF SCOPE (ignore): `cli/`, the hosted REST API / demo,
-                 `internal/tester` round-tripping, task-list (checkbox) handling,
-                 and Go-only dependencies (`golang.org/x/net`, `yuin/goldmark`).
-            4. Post a comment with this structure:
-               - **Verdict** — one of: "Nothing to port (pin-bump only)" or
-                 "Porting needed".
-               - **In-scope changes** — bullet list of changed in-scope files with a
-                 one-line note on what changed and the porting impact; say "none" if
-                 empty.
-               - **Out-of-scope changes** — brief bullet list, for completeness.
-               - **Recommended pin** — the tag or SHA to bump `NOTICE.md`,
-                 `README.md`, and `docs/architecture.md` to.
-            Be precise and terse. Do not modify any files or open pull requests —
-            only comment. If the compare shows no in-scope changes, say so plainly.
