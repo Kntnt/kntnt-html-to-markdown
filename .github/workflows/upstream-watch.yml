@@ -1,0 +1,218 @@
+name: Upstream watch
+
+# Watches upstream JohannesKaufmann/html-to-markdown for movement past the
+# version this port is pinned to (in NOTICE.md), in two decoupled jobs:
+#
+#   check   The durable alert. Detects a moved main or a newer tag and opens a
+#           single tracking issue. No secrets, no Claude — always runs. This is
+#           what every collaborator gets, whether or not they use Claude.
+#
+#   assess  An optional layer that saves the maintainer manual triage. When a
+#           NEW issue is opened, it has Claude read the upstream diff, classify
+#           each change against the port's scope, and comment its verdict. Gated
+#           on the ANTHROPIC_API_KEY secret: absent it skips silently and the
+#           plain alert from `check` still stands.
+#
+# The jobs are coupled by `needs` rather than a label event on purpose: GitHub
+# does not re-trigger workflows from GITHUB_TOKEN-driven events, so a
+# cross-workflow label trigger would need a long-lived PAT. A gated second job
+# needs no extra credential.
+
+on:
+  schedule:
+    # Mondays, 06:17 UTC. Off the hour to dodge GitHub's scheduling congestion.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Check upstream for changes past the pin
+    runs-on: ubuntu-latest
+    outputs:
+      moved: ${{ steps.detect.outputs.moved }}
+      created: ${{ steps.issue.outputs.created }}
+      issue: ${{ steps.issue.outputs.number }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Detect upstream movement past the pin
+        id: detect
+        env:
+          UPSTREAM: https://github.com/JohannesKaufmann/html-to-markdown.git
+        run: |
+          set -euo pipefail
+
+          # NOTICE.md is the single source of truth for what this port tracks.
+          pinned_sha="$(grep -oE '[0-9a-f]{40}' NOTICE.md | head -n1)"
+          pinned_tag="$(grep -oE 'v2\.[0-9]+\.[0-9]+' NOTICE.md | head -n1)"
+
+          # Query upstream over the wire — no clone, no dependencies.
+          main_sha="$(git ls-remote "$UPSTREAM" refs/heads/main | cut -f1)"
+          latest_tag="$(git ls-remote --tags --refs "$UPSTREAM" \
+            | sed 's#.*refs/tags/##' | grep -E '^v2\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -n1)"
+
+          # A moved main or a newer tag both mean "something to look at". Unmerged
+          # dependabot branches touch neither, so they never trip this.
+          moved=false
+          reasons=""
+          if [ -n "$main_sha" ] && [ "$main_sha" != "$pinned_sha" ]; then
+            moved=true
+            reasons="${reasons}- Upstream \`main\` is at \`${main_sha:0:12}\`; the pin is \`${pinned_sha:0:12}\`."$'\n'
+          fi
+          if [ -n "$latest_tag" ] && [ "$latest_tag" != "$pinned_tag" ]; then
+            moved=true
+            reasons="${reasons}- Latest upstream tag is \`${latest_tag}\`; the pin is \`${pinned_tag}\`."$'\n'
+          fi
+
+          echo "Pinned: $pinned_tag ($pinned_sha)"
+          echo "Upstream main: $main_sha"
+          echo "Latest tag: $latest_tag"
+          echo "Moved: $moved"
+
+          {
+            echo "moved=$moved"
+            echo "pinned_sha=$pinned_sha"
+            echo "pinned_tag=$pinned_tag"
+            echo "main_sha=$main_sha"
+            echo "latest_tag=$latest_tag"
+            echo "reasons<<REASONS_EOF"
+            printf '%s' "$reasons"
+            echo "REASONS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the tracking issue
+        id: issue
+        if: steps.detect.outputs.moved == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED_SHA: ${{ steps.detect.outputs.pinned_sha }}
+          PINNED_TAG: ${{ steps.detect.outputs.pinned_tag }}
+          MAIN_SHA: ${{ steps.detect.outputs.main_sha }}
+          LATEST_TAG: ${{ steps.detect.outputs.latest_tag }}
+          REASONS: ${{ steps.detect.outputs.reasons }}
+        run: |
+          set -euo pipefail
+
+          # Self-contained: create the tracking label if the repo does not have it
+          # yet. It identifies the issue for idempotency and human filtering.
+          gh label create upstream-sync \
+            --description "Upstream html-to-markdown has moved past the pinned version" \
+            --color 1D76DB 2>/dev/null || true
+
+          # Assemble the issue body: the facts, a ready-made compare link, and the
+          # scope rules a human (or Claude) needs to decide what to port.
+          title="Upstream moved past ${PINNED_TAG} — evaluate for porting"
+          body="$(cat <<EOF
+          Upstream [\`JohannesKaufmann/html-to-markdown\`](https://github.com/JohannesKaufmann/html-to-markdown) has moved past the version this port is pinned to.
+
+          **Pinned here:** \`${PINNED_TAG}\` — commit \`${PINNED_SHA}\`
+          **Upstream now:**
+          - \`main\` @ \`${MAIN_SHA}\`
+          - latest tag \`${LATEST_TAG}\`
+
+          ${REASONS}
+          **Diff:** https://github.com/JohannesKaufmann/html-to-markdown/compare/${PINNED_SHA}...main
+
+          ### What to decide
+          Classify each changed file against the port's scope (see \`docs/architecture.md\`):
+
+          - **In scope** — re-port: the \`converter\` core and the \`base\`, \`commonmark\`, \`strikethrough\`, and \`table\` plugins; \`ESCAPING.md\` and \`internal/escape\`; golden fixtures for the ported plugins.
+          - **Out of scope** — ignore: \`cli/\`, the hosted REST API / demo, \`internal/tester\` round-tripping, task-list handling, and Go-only dependencies (\`golang.org/x/net\`, \`yuin/goldmark\`).
+
+          If anything in scope changed, re-port it, re-port any changed golden fixtures, and bump the pin in \`NOTICE.md\`, \`README.md\`, and \`docs/architecture.md\`. If nothing in scope changed, just bump the pin.
+
+          <sub>Opened automatically by \`.github/workflows/upstream-watch.yml\`. Refreshed on each run; comments are preserved.</sub>
+          EOF
+          )"
+
+          # Idempotent: one open issue per pin. Refresh its body if it exists;
+          # otherwise create it. `created` gates the assessment job so Claude
+          # comments once on discovery, not on every weekly refresh.
+          existing="$(gh issue list --state open --label upstream-sync --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body "$body"
+            echo "Refreshed existing issue #$existing"
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            echo "number=$existing" >> "$GITHUB_OUTPUT"
+          else
+            url="$(gh issue create --title "$title" --label upstream-sync --body "$body")"
+            number="$(printf '%s' "$url" | grep -oE '[0-9]+$')"
+            echo "Created issue #$number"
+            echo "created=true" >> "$GITHUB_OUTPUT"
+            echo "number=$number" >> "$GITHUB_OUTPUT"
+          fi
+
+  assess:
+    name: Claude portability assessment
+    needs: check
+    # Only when a brand-new tracking issue was opened — assess once on discovery,
+    # never on the weekly refresh of an already-open issue.
+    if: needs.check.outputs.created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Guard on API-key presence
+        id: guard
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # The secret is this layer's on/off switch. Without it, skip silently —
+          # the issue alert from the check job is already posted.
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "No ANTHROPIC_API_KEY secret set — skipping assessment."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.guard.outputs.enabled == 'true'
+        uses: actions/checkout@v5
+
+      - name: Assess the upstream diff and comment on the issue
+        if: steps.guard.outputs.enabled == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          claude_args: '--allowedTools Bash,Read,Grep,Glob --max-turns 25'
+          prompt: |
+            You are triaging whether an upstream release of the Go library
+            `JohannesKaufmann/html-to-markdown` needs porting into this PHP port.
+            Work non-interactively and finish by posting exactly one comment on
+            GitHub issue #${{ needs.check.outputs.issue }} in this repository.
+
+            Steps:
+            1. Read `NOTICE.md` to get the pinned upstream commit SHA and tag.
+            2. Get the upstream diff since the pin, e.g.:
+               `gh api repos/JohannesKaufmann/html-to-markdown/compare/<pinned_sha>...main`
+               to list changed files, and inspect individual changes as needed.
+            3. Classify every changed file against this port's scope, documented in
+               `docs/architecture.md`:
+               - IN SCOPE (must be ported): the `converter` core; the `base`,
+                 `commonmark`, `strikethrough`, and `table` plugins; `ESCAPING.md`
+                 and `internal/escape`; the golden fixtures of those plugins.
+               - OUT OF SCOPE (ignore): `cli/`, the hosted REST API / demo,
+                 `internal/tester` round-tripping, task-list (checkbox) handling,
+                 and Go-only dependencies (`golang.org/x/net`, `yuin/goldmark`).
+            4. Post a comment with this structure:
+               - **Verdict** — one of: "Nothing to port (pin-bump only)" or
+                 "Porting needed".
+               - **In-scope changes** — bullet list of changed in-scope files with a
+                 one-line note on what changed and the porting impact; say "none" if
+                 empty.
+               - **Out-of-scope changes** — brief bullet list, for completeness.
+               - **Recommended pin** — the tag or SHA to bump `NOTICE.md`,
+                 `README.md`, and `docs/architecture.md` to.
+            Be precise and terse. Do not modify any files or open pull requests —
+            only comment. If the compare shows no in-scope changes, say so plainly.
