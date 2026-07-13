@@ -1,0 +1,133 @@
+name: Upstream watch
+
+# The durable, Claude-independent alert. Weekly (and on-demand) it checks whether
+# upstream JohannesKaufmann/html-to-markdown has moved past the version this port
+# is pinned to in NOTICE.md, and opens a single tracking issue when it has. Needs
+# no secrets and no Claude, so every collaborator gets the alert regardless — and
+# because the issue is authored by github-actions[bot], anyone watching the repo
+# at "Custom -> Issues" is emailed reliably (GitHub does not self-notify authors).
+#
+# The portability assessment is handled separately by a Claude Code Routine, which
+# polls for a fresh upstream-sync issue and comments its verdict — billed on the
+# maintainer's Claude plan, so no ANTHROPIC_API_KEY lives here.
+
+on:
+  schedule:
+    # Mondays, 06:17 UTC. Off the hour to dodge GitHub's scheduling congestion.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Check upstream for changes past the pin
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Detect upstream movement past the pin
+        id: detect
+        env:
+          UPSTREAM: https://github.com/JohannesKaufmann/html-to-markdown.git
+        run: |
+          set -euo pipefail
+
+          # NOTICE.md is the single source of truth for what this port tracks.
+          pinned_sha="$(grep -oE '[0-9a-f]{40}' NOTICE.md | head -n1)"
+          pinned_tag="$(grep -oE 'v2\.[0-9]+\.[0-9]+' NOTICE.md | head -n1)"
+
+          # Query upstream over the wire — no clone, no dependencies.
+          main_sha="$(git ls-remote "$UPSTREAM" refs/heads/main | cut -f1)"
+          latest_tag="$(git ls-remote --tags --refs "$UPSTREAM" \
+            | sed 's#.*refs/tags/##' | grep -E '^v2\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -n1)"
+
+          # A moved main or a newer tag both mean "something to look at". Unmerged
+          # dependabot branches touch neither, so they never trip this.
+          moved=false
+          reasons=""
+          if [ -n "$main_sha" ] && [ "$main_sha" != "$pinned_sha" ]; then
+            moved=true
+            reasons="${reasons}- Upstream \`main\` is at \`${main_sha:0:12}\`; the pin is \`${pinned_sha:0:12}\`."$'\n'
+          fi
+          if [ -n "$latest_tag" ] && [ "$latest_tag" != "$pinned_tag" ]; then
+            moved=true
+            reasons="${reasons}- Latest upstream tag is \`${latest_tag}\`; the pin is \`${pinned_tag}\`."$'\n'
+          fi
+
+          echo "Pinned: $pinned_tag ($pinned_sha)"
+          echo "Upstream main: $main_sha"
+          echo "Latest tag: $latest_tag"
+          echo "Moved: $moved"
+
+          {
+            echo "moved=$moved"
+            echo "pinned_sha=$pinned_sha"
+            echo "pinned_tag=$pinned_tag"
+            echo "main_sha=$main_sha"
+            echo "latest_tag=$latest_tag"
+            echo "reasons<<REASONS_EOF"
+            printf '%s' "$reasons"
+            echo "REASONS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the tracking issue
+        if: steps.detect.outputs.moved == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED_SHA: ${{ steps.detect.outputs.pinned_sha }}
+          PINNED_TAG: ${{ steps.detect.outputs.pinned_tag }}
+          MAIN_SHA: ${{ steps.detect.outputs.main_sha }}
+          LATEST_TAG: ${{ steps.detect.outputs.latest_tag }}
+          REASONS: ${{ steps.detect.outputs.reasons }}
+        run: |
+          set -euo pipefail
+
+          # Self-contained: create the tracking label if the repo does not have it
+          # yet. It identifies the issue for idempotency and human filtering, and is
+          # what the Claude Code Routine looks for.
+          gh label create upstream-sync \
+            --description "Upstream html-to-markdown has moved past the pinned version" \
+            --color 1D76DB 2>/dev/null || true
+
+          # Assemble the issue body: the facts, a ready-made compare link, and the
+          # scope rules a human (or the Routine) needs to decide what to port.
+          title="Upstream moved past ${PINNED_TAG} — evaluate for porting"
+          body="$(cat <<EOF
+          Upstream [\`JohannesKaufmann/html-to-markdown\`](https://github.com/JohannesKaufmann/html-to-markdown) has moved past the version this port is pinned to.
+
+          **Pinned here:** \`${PINNED_TAG}\` — commit \`${PINNED_SHA}\`
+          **Upstream now:**
+          - \`main\` @ \`${MAIN_SHA}\`
+          - latest tag \`${LATEST_TAG}\`
+
+          ${REASONS}
+          **Diff:** https://github.com/JohannesKaufmann/html-to-markdown/compare/${PINNED_SHA}...main
+
+          ### What to decide
+          Classify each changed file against the port's scope (see \`docs/architecture.md\`):
+
+          - **In scope** — re-port: the \`converter\` core and the \`base\`, \`commonmark\`, \`strikethrough\`, and \`table\` plugins; \`ESCAPING.md\` and \`internal/escape\`; golden fixtures for the ported plugins.
+          - **Out of scope** — ignore: \`cli/\`, the hosted REST API / demo, \`internal/tester\` round-tripping, task-list handling, and Go-only dependencies (\`golang.org/x/net\`, \`yuin/goldmark\`).
+
+          If anything in scope changed, re-port it, re-port any changed golden fixtures, and bump the pin in \`NOTICE.md\`, \`README.md\`, and \`docs/architecture.md\`. If nothing in scope changed, just bump the pin.
+
+          <sub>Opened automatically by \`.github/workflows/upstream-watch.yml\`. Refreshed on each run; comments are preserved.</sub>
+          EOF
+          )"
+
+          # Idempotent: one open issue per pin. Refresh its body if it exists;
+          # otherwise create it. The Claude Code Routine adds the assessment comment.
+          existing="$(gh issue list --state open --label upstream-sync --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body "$body"
+            echo "Refreshed existing issue #$existing"
+          else
+            url="$(gh issue create --title "$title" --label upstream-sync --body "$body")"
+            echo "Created issue: $url"
+          fi
